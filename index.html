@@ -12,6 +12,7 @@
   button{background:#16a34a;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:16px;margin:6px;cursor:pointer}
   button.sec{background:#2563eb}
   button.red{background:#dc2626}
+  #scanner{width:90%;font-size:20px;padding:12px;border-radius:10px;border:2px solid #16a34a;background:#1e293b;color:#fff;text-align:center;margin:10px 0}
   #result{font-size:26px;letter-spacing:1px;margin:16px 0;word-break:break-all;background:#1e293b;border-radius:12px;padding:14px;min-height:30px}
   #msg{color:#fbbf24;font-size:14px;min-height:20px;margin:8px 0}
   input[type=file]{display:none}
@@ -20,6 +21,10 @@
 <body>
 <div id="box">
   <h1>قارئ QR والباركود للوصفات</h1>
+
+  <div>قارئ يدوي: اترك المؤشر في الخانة ومرّر القارئ</div>
+  <input type="text" id="scanner" placeholder="في انتظار القارئ اليدوي..." autocomplete="off">
+
   <video id="video" playsinline muted></video>
   <div id="msg"></div>
   <button onclick="startCam()">تشغيل الكاميرا</button>
@@ -36,7 +41,23 @@
 const video=document.getElementById('video');
 const result=document.getElementById('result');
 const msg=document.getElementById('msg');
+const scanner=document.getElementById('scanner');
 let reader=null;
+
+// القارئ اليدوي: يكتب الرقم ثم Enter
+scanner.addEventListener('keydown',function(e){
+  if(e.key==='Enter'){
+    e.preventDefault();
+    const v=scanner.value.trim();
+    if(v){showCode(v);}
+    scanner.value='';
+  }
+});
+scanner.focus();
+// إعادة التركيز على الخانة عند الضغط في أي مكان فارغ
+document.addEventListener('click',function(e){
+  if(e.target.tagName!=='BUTTON'){scanner.focus();}
+});
 
 function makeReader(){
   const Z=ZXing;
