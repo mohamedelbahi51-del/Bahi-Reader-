@@ -3,25 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>قارئ QR للوصفات</title>
+<title>قارئ الوصفات</title>
 <style>
   body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#0f172a;color:#fff;text-align:center;padding:16px}
   h1{font-size:22px;margin:8px 0 16px}
-  #box{max-width:420px;margin:auto}
+  #box{max-width:460px;margin:auto}
   video{width:100%;border-radius:12px;background:#000;display:none}
   button{background:#16a34a;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:16px;margin:6px;cursor:pointer}
   button.sec{background:#2563eb}
+  button.red{background:#dc2626}
   #result{font-size:26px;letter-spacing:1px;margin:16px 0;word-break:break-all;background:#1e293b;border-radius:12px;padding:14px;min-height:30px}
-  #msg{color:#fbbf24;font-size:14px;min-height:20px}
+  #msg{color:#fbbf24;font-size:14px;min-height:20px;margin:8px 0}
   input[type=file]{display:none}
 </style>
 </head>
 <body>
 <div id="box">
-  <h1>قارئ QR للوصفات</h1>
-  <video id="video" playsinline></video>
+  <h1>قارئ QR والباركود للوصفات</h1>
+  <video id="video" playsinline muted></video>
   <div id="msg"></div>
   <button onclick="startCam()">تشغيل الكاميرا</button>
+  <button class="red" onclick="stopCam()">إيقاف الكاميرا</button>
   <button class="sec" onclick="document.getElementById('file').click()">قراءة من صورة</button>
   <input type="file" id="file" accept="image/*" onchange="readFile(event)">
   <div id="result">---</div>
@@ -29,12 +31,31 @@
   <button class="sec" onclick="openWasfaty()">فتح وصفتي</button>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
 <script>
 const video=document.getElementById('video');
 const result=document.getElementById('result');
 const msg=document.getElementById('msg');
-let stream=null, scanning=false;
+let reader=null;
+
+function makeReader(){
+  const Z=ZXing;
+  const hints=new Map();
+  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS,[
+    Z.BarcodeFormat.QR_CODE,
+    Z.BarcodeFormat.CODE_128,
+    Z.BarcodeFormat.CODE_39,
+    Z.BarcodeFormat.EAN_13,
+    Z.BarcodeFormat.EAN_8,
+    Z.BarcodeFormat.UPC_A,
+    Z.BarcodeFormat.UPC_E,
+    Z.BarcodeFormat.ITF,
+    Z.BarcodeFormat.CODABAR,
+    Z.BarcodeFormat.DATA_MATRIX
+  ]);
+  hints.set(Z.DecodeHintType.TRY_HARDER,true);
+  return new Z.BrowserMultiFormatReader(hints,300);
+}
 
 function showCode(text){
   result.textContent=text;
@@ -44,57 +65,43 @@ function showCode(text){
 
 async function startCam(){
   try{
-    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject=stream;
+    stopCam();
+    reader=makeReader();
     video.style.display='block';
-    await video.play();
-    scanning=true;
     msg.textContent='وجّه الكاميرا نحو الكود';
-    requestAnimationFrame(tick);
+    await reader.decodeFromConstraints(
+      {video:{facingMode:'environment'}},
+      video,
+      (res,err)=>{
+        if(res){
+          showCode(res.getText());
+          stopCam();
+        }
+      }
+    );
   }catch(e){
     msg.textContent='تعذر تشغيل الكاميرا، جرّب القراءة من صورة';
   }
 }
 
 function stopCam(){
-  scanning=false;
-  if(stream){stream.getTracks().forEach(t=>t.stop());}
+  if(reader){reader.reset();reader=null;}
   video.style.display='none';
 }
 
-function tick(){
-  if(!scanning)return;
-  if(video.readyState===video.HAVE_ENOUGH_DATA){
-    const c=document.createElement('canvas');
-    c.width=video.videoWidth;c.height=video.videoHeight;
-    const ctx=c.getContext('2d');
-    ctx.drawImage(video,0,0,c.width,c.height);
-    const img=ctx.getImageData(0,0,c.width,c.height);
-    const code=jsQR(img.data,img.width,img.height);
-    if(code&&code.data){
-      stopCam();
-      showCode(code.data);
-      return;
-    }
-  }
-  requestAnimationFrame(tick);
-}
-
-function readFile(ev){
+async function readFile(ev){
   const f=ev.target.files[0];
   if(!f)return;
-  const img=new Image();
-  img.onload=()=>{
-    const c=document.createElement('canvas');
-    c.width=img.width;c.height=img.height;
-    const ctx=c.getContext('2d');
-    ctx.drawImage(img,0,0);
-    const d=ctx.getImageData(0,0,c.width,c.height);
-    const code=jsQR(d.data,d.width,d.height);
-    if(code&&code.data){showCode(code.data);}
-    else{msg.textContent='لم يتم العثور على كود في الصورة';}
-  };
-  img.src=URL.createObjectURL(f);
+  const url=URL.createObjectURL(f);
+  try{
+    const r=makeReader();
+    const res=await r.decodeFromImageUrl(url);
+    showCode(res.getText());
+    r.reset();
+  }catch(e){
+    msg.textContent='لم يتم العثور على كود في الصورة';
+  }
+  ev.target.value='';
 }
 
 function copyNum(){
