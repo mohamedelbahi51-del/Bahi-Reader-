@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>قارئ QR للوصفات</title>
+<style>
+  body{margin:0;font-family:Tahoma,Arial,sans-serif;background:#0f172a;color:#fff;text-align:center;padding:16px}
+  h1{font-size:22px;margin:8px 0 16px}
+  #box{max-width:420px;margin:auto}
+  video{width:100%;border-radius:12px;background:#000;display:none}
+  button{background:#16a34a;color:#fff;border:0;border-radius:10px;padding:12px 18px;font-size:16px;margin:6px;cursor:pointer}
+  button.sec{background:#2563eb}
+  #result{font-size:26px;letter-spacing:1px;margin:16px 0;word-break:break-all;background:#1e293b;border-radius:12px;padding:14px;min-height:30px}
+  #msg{color:#fbbf24;font-size:14px;min-height:20px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div id="box">
+  <h1>قارئ QR للوصفات</h1>
+  <video id="video" playsinline></video>
+  <div id="msg"></div>
+  <button onclick="startCam()">تشغيل الكاميرا</button>
+  <button class="sec" onclick="document.getElementById('file').click()">قراءة من صورة</button>
+  <input type="file" id="file" accept="image/*" onchange="readFile(event)">
+  <div id="result">---</div>
+  <button onclick="copyNum()">نسخ الرقم</button>
+  <button class="sec" onclick="openWasfaty()">فتح وصفتي</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script>
+const video=document.getElementById('video');
+const result=document.getElementById('result');
+const msg=document.getElementById('msg');
+let stream=null, scanning=false;
+
+function showCode(text){
+  result.textContent=text;
+  msg.textContent='تمت القراءة';
+  copyNum();
+}
+
+async function startCam(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject=stream;
+    video.style.display='block';
+    await video.play();
+    scanning=true;
+    msg.textContent='وجّه الكاميرا نحو الكود';
+    requestAnimationFrame(tick);
+  }catch(e){
+    msg.textContent='تعذر تشغيل الكاميرا، جرّب القراءة من صورة';
+  }
+}
+
+function stopCam(){
+  scanning=false;
+  if(stream){stream.getTracks().forEach(t=>t.stop());}
+  video.style.display='none';
+}
+
+function tick(){
+  if(!scanning)return;
+  if(video.readyState===video.HAVE_ENOUGH_DATA){
+    const c=document.createElement('canvas');
+    c.width=video.videoWidth;c.height=video.videoHeight;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(video,0,0,c.width,c.height);
+    const img=ctx.getImageData(0,0,c.width,c.height);
+    const code=jsQR(img.data,img.width,img.height);
+    if(code&&code.data){
+      stopCam();
+      showCode(code.data);
+      return;
+    }
+  }
+  requestAnimationFrame(tick);
+}
+
+function readFile(ev){
+  const f=ev.target.files[0];
+  if(!f)return;
+  const img=new Image();
+  img.onload=()=>{
+    const c=document.createElement('canvas');
+    c.width=img.width;c.height=img.height;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(img,0,0);
+    const d=ctx.getImageData(0,0,c.width,c.height);
+    const code=jsQR(d.data,d.width,d.height);
+    if(code&&code.data){showCode(code.data);}
+    else{msg.textContent='لم يتم العثور على كود في الصورة';}
+  };
+  img.src=URL.createObjectURL(f);
+}
+
+function copyNum(){
+  const t=result.textContent;
+  if(t&&t!=='---'){
+    navigator.clipboard.writeText(t).then(()=>{msg.textContent='تم نسخ الرقم'}).catch(()=>{});
+  }
+}
+
+function openWasfaty(){
+  window.open('https://wasfaty.sa/','_blank');
+}
+</script>
+</body>
+</html>
